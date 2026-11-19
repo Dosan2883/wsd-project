@@ -59,6 +59,7 @@ class AuthIntegrationTest {
             case "expired" -> builder.expirationTime(Date.from(now.minusSeconds(1)));
             case "issuer" -> builder.issuer("other-api");
             case "audience" -> builder.audience("other-web");
+            case "no-audience" -> builder.audience((List<String>) null);
             case "no-expiry" -> builder.expirationTime(null);
             case "no-issued-at" -> builder.issueTime(null);
             case "future" -> builder.notBeforeTime(Date.from(now.plusSeconds(60)));
@@ -142,7 +143,7 @@ class AuthIntegrationTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"expired", "issuer", "audience", "no-expiry", "no-issued-at", "future", "future-issued-at", "bad-subject", "signature", "algorithm"})
+    @ValueSource(strings = {"expired", "issuer", "audience", "no-audience", "no-expiry", "no-issued-at", "future", "future-issued-at", "bad-subject", "signature", "algorithm"})
     void invalidTokensAre401(String variant) throws Exception {
         var user = account(UserAccount.Role.USER);
         mvc.perform(get("/api/me").header("Authorization", "Bearer " + signed(user, variant)))
@@ -166,10 +167,46 @@ class AuthIntegrationTest {
     @Test void suspensionImmediatelyBlocksExistingTokenAndNewLogin() throws Exception {
         var user = account(UserAccount.Role.USER);
         String token = login();
-        user.setStatus(UserAccount.Status.SUSPENDED); users.saveAndFlush(user);
-        mvc.perform(get("/api/me").header("Authorization", "Bearer " + token))
+        user.suspend("반복적인 운영 정책 위반"); users.saveAndFlush(user);
+        var blocked = mvc.perform(get("/api/me").header("Authorization", "Bearer " + token))
+            .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCOUNT_SUSPENDED"))
+            .andExpect(jsonPath("$.suspension.reason").value("반복적인 운영 정책 위반"))
+            .andExpect(jsonPath("$.suspension.suspendedAt").isNotEmpty()).andReturn();
+        var deniedLogin = credentials("login", "member@example.com", PASSWORD, 403);
+        assertThat(json.readTree(deniedLogin.getResponse().getContentAsString()).get("suspension"))
+            .isEqualTo(json.readTree(blocked.getResponse().getContentAsString()).get("suspension"));
+        var wrongPassword = credentials("login", "member@example.com", "incorrect-password", 401);
+        assertThat(json.readTree(wrongPassword.getResponse().getContentAsString()).has("suspension")).isFalse();
+        mvc.perform(get("/api/admin/access").header("Authorization", "Bearer " + token))
             .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCOUNT_SUSPENDED"));
-        credentials("login", "member@example.com", PASSWORD, 403);
+    }
+
+    @Test void 정지해제시안내정보가제거되고기존유효토큰도다시사용한다() throws Exception {
+        var user = account(UserAccount.Role.USER);
+        String token = login();
+        user.suspend("운영 정책 위반"); users.saveAndFlush(user);
+        user.restore(); users.saveAndFlush(user);
+        var restored = users.findById(user.getId()).orElseThrow();
+        assertThat(restored.getSuspensionReason()).isNull();
+        assertThat(restored.getSuspendedAt()).isNull();
+        mvc.perform(get("/api/me").header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ACTIVE"));
+    }
+
+    @Test void 정지사유가없거나너무길면상태를바꾸지않는다() {
+        var user = account(UserAccount.Role.USER);
+        for (String reason : List.of("", "  ", "가".repeat(501))) {
+            assertThatThrownBy(() -> user.suspend(reason)).isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThat(user.getStatus()).isEqualTo(UserAccount.Status.ACTIVE);
+    }
+
+    @Test void 새로고침용내정보는현재DB역할을반환한다() throws Exception {
+        var user = account(UserAccount.Role.ADMIN);
+        String token = login();
+        user.setRole(UserAccount.Role.USER); users.saveAndFlush(user);
+        mvc.perform(get("/api/me").header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("USER"));
     }
 
     @Test void removedUserCannotUseExistingToken() throws Exception {

@@ -7,5 +7,5 @@ export type ArticleDetail = Omit<ArticleSummary, 'excerpt'> & { body: string; or
 export type ArticlePage = { items: ArticleSummary[]; page: number; size: number; totalElements: number; totalPages: number }
 
 export function koreanDate(value: string) {
-  return new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' })
+  return new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short', hour12: false })
 }

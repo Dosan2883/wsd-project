@@ -170,7 +170,7 @@ class ArticleIntegrationTest {
     }
 
     @Test void 정지전토큰으로글을조회할수없다() throws Exception {
-        var user = users.findByEmail("reader@example.com").orElseThrow(); user.setStatus(UserAccount.Status.SUSPENDED); users.saveAndFlush(user);
+        var user = users.findByEmail("reader@example.com").orElseThrow(); user.suspend("테스트 정지 사유"); users.saveAndFlush(user);
         mvc.perform(get("/api/articles").header("Authorization", "Bearer " + token)).andExpect(status().isForbidden());
     }
 }

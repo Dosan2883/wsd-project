@@ -1,8 +1,9 @@
 export type User = { id: number; email: string; role: 'USER' | 'ADMIN'; status: 'ACTIVE' | 'SUSPENDED'; createdAt: string }
 export type Session = { accessToken: string; tokenType: 'Bearer'; expiresAt: string; user: User }
+export type Suspension = { reason: string; suspendedAt: string | null }
 
 export class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string, public fields: Record<string, string> = {}) {
+  constructor(public status: number, public code: string, message: string, public fields: Record<string, string> = {}, public suspension?: Suspension) {
     super(message)
   }
 }
@@ -23,6 +24,6 @@ export async function api<T>(path: string, options: { method?: string; body?: un
     throw new ApiError(0, 'NETWORK_ERROR', '서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.')
   }
   const body = await response.json().catch(() => null)
-  if (!response.ok) throw new ApiError(response.status, body?.code ?? 'REQUEST_FAILED', body?.message ?? '요청을 처리하지 못했습니다.', body?.fields ?? {})
+  if (!response.ok) throw new ApiError(response.status, body?.code ?? 'REQUEST_FAILED', body?.message ?? '요청을 처리하지 못했습니다.', body?.fields ?? {}, body?.suspension)
   return body as T
 }

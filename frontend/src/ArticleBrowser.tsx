@@ -23,7 +23,7 @@ function originalLink(value: string) {
   catch { return null }
 }
 
-export default function ArticleBrowser({ token, onSessionExpired }: { token: string; onSessionExpired: (message: string) => void }) {
+export default function ArticleBrowser({ token, onSessionExpired }: { token: string; onSessionExpired: (failure: ApiError) => void }) {
   const [route, setRoute] = useState(readRoute)
   const [query, setQuery] = useState(route.q)
   const [games, setGames] = useState<Game[]>([])
@@ -62,7 +62,7 @@ export default function ArticleBrowser({ token, onSessionExpired }: { token: str
       } catch (caught) {
         if (controller.signal.aborted) return
         const failure = caught as ApiError
-        if (failure.status === 401 || failure.code === 'ACCOUNT_SUSPENDED') onSessionExpired(failure.message)
+        if (failure.status === 401 || failure.code === 'ACCOUNT_SUSPENDED') onSessionExpired(failure)
         else setError(failure.message || '글을 불러오지 못했습니다. 다시 시도해 주세요.')
       } finally { if (!controller.signal.aborted) setLoading(false) }
     }

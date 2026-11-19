@@ -69,7 +69,7 @@ public class AuthService {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
         if (user.getStatus() != UserAccount.Status.ACTIVE) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "ACCOUNT_SUSPENDED", "정지된 계정입니다.");
+            throw new AccountSuspendedException(user);
         }
         Instant now = Instant.now();
         Instant expiresAt = now.plusSeconds(ttl);
@@ -78,5 +78,12 @@ public class AuthService {
         var header = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
         String token = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
         return new LoginResult(token, "Bearer", expiresAt, UserView.from(user));
+    }
+
+    public UserView currentUser(Long id) {
+        var user = users.findById(id).orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED,
+            "UNAUTHENTICATED", "유효하지 않은 계정입니다. 다시 로그인해 주세요."));
+        if (user.getStatus() != UserAccount.Status.ACTIVE) throw new AccountSuspendedException(user);
+        return UserView.from(user);
     }
 }

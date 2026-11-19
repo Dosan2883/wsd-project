@@ -21,6 +21,10 @@ public class UserAccount {
     private Status status;
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
+    @Column(name = "suspension_reason", length = 500)
+    private String suspensionReason;
+    @Column(name = "suspended_at")
+    private Instant suspendedAt;
 
     protected UserAccount() {}
 
@@ -38,6 +42,23 @@ public class UserAccount {
     public Role getRole() { return role; }
     public Status getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
-    public void setStatus(Status status) { this.status = status; }
+    public String getSuspensionReason() { return suspensionReason; }
+    public Instant getSuspendedAt() { return suspendedAt; }
+
+    public void suspend(String reason) {
+        if (reason == null || reason.isBlank() || reason.length() > 500) {
+            throw new IllegalArgumentException("정지 사유는 1–500자로 입력해 주세요.");
+        }
+        if (status == Status.SUSPENDED) throw new IllegalStateException("이미 정지된 계정입니다.");
+        this.status = Status.SUSPENDED;
+        this.suspensionReason = reason.strip();
+        this.suspendedAt = Instant.now();
+    }
+
+    public void restore() {
+        this.status = Status.ACTIVE;
+        this.suspensionReason = null;
+        this.suspendedAt = null;
+    }
     public void setRole(Role role) { this.role = role; }
 }

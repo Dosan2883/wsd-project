@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, ApiError } from './api'
-import type { Session, User } from './api'
+import type { Session, Suspension, User } from './api'
 import ArticleBrowser from './ArticleBrowser'
+import { forgetSession, readSession, rememberSession } from './session'
+import { koreanDate } from './articles'
 
 type Page = 'login' | 'signup' | 'account' | 'admin' | 'articles'
 function initialPage(): Page {
@@ -14,6 +16,9 @@ function initialPage(): Page {
 export default function App() {
   const [page, setPage] = useState<Page>(initialPage)
   const [session, setSession] = useState<Session | null>(null)
+  const [storedSession] = useState(readSession)
+  const [restoring, setRestoring] = useState(Boolean(storedSession))
+  const [suspension, setSuspension] = useState<Suspension | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [notice, setNotice] = useState('')
@@ -35,10 +40,41 @@ export default function App() {
   }, [])
 
   const clearSession = useCallback((message: string) => {
+    forgetSession()
     setSession(null)
+    setSuspension(null)
     navigate('login')
     setNotice(message)
   }, [navigate])
+
+  const handleAuthFailure = useCallback((failure: ApiError) => {
+    clearSession(failure.message)
+    if (failure.code === 'ACCOUNT_SUSPENDED') {
+      setSuspension(failure.suspension ?? { reason: '자세한 정지 사유는 관리자에게 문의해 주세요.', suspendedAt: null })
+    }
+  }, [clearSession])
+
+  useEffect(() => {
+    if (!storedSession) return
+    const controller = new AbortController()
+    async function restoreSession() {
+      try {
+        const user = await api<User>('/me', { token: storedSession!.accessToken, signal: controller.signal })
+        if (controller.signal.aborted) return
+        if (Date.parse(storedSession!.expiresAt) <= Date.now()) {
+          clearSession('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+          return
+        }
+        setSession({ ...storedSession!, tokenType: 'Bearer', user })
+        const currentPage = initialPage()
+        if (currentPage === 'login' || currentPage === 'signup') navigate('articles')
+      } catch (caught) {
+        if (!controller.signal.aborted) handleAuthFailure(caught as ApiError)
+      } finally { if (!controller.signal.aborted) setRestoring(false) }
+    }
+    void restoreSession()
+    return () => controller.abort()
+  }, [storedSession, clearSession, handleAuthFailure, navigate])
 
   useEffect(() => {
     const onHashChange = () => {
@@ -78,11 +114,14 @@ export default function App() {
         const result = await api<Session>('/auth/login', { method: 'POST', body: { email, password }, signal: controller.signal })
         if (controller.signal.aborted) return
         setSession(result)
+        rememberSession(result)
+        setSuspension(null)
         navigate('articles')
       }
     } catch (caught) {
       if (controller.signal.aborted) return
       const failure = caught as ApiError
+      if (failure.code === 'ACCOUNT_SUSPENDED') { handleAuthFailure(failure); return }
       setError(failure.message)
       setFields(failure.fields ?? {})
     } finally { if (!controller.signal.aborted) setPending(false) }
@@ -104,7 +143,7 @@ export default function App() {
     } catch (caught) {
       if (controller.signal.aborted) return
       const failure = caught as ApiError
-      if (failure.status === 401 || failure.code === 'ACCOUNT_SUSPENDED') clearSession(failure.message)
+      if (failure.status === 401 || failure.code === 'ACCOUNT_SUSPENDED') handleAuthFailure(failure)
       else setError(failure.message)
     } finally { if (!controller.signal.aborted) setPending(false) }
   }
@@ -118,7 +157,8 @@ export default function App() {
       <span className="header-caption">게임의 다음 소식을 만나는 곳</span>
       {session && <nav className="header-nav" aria-label="회원 메뉴"><a className="text-button" href="#/articles" aria-current={page === 'articles' ? 'page' : undefined}>글 목록</a><a className="text-button" href="#/account" aria-current={page === 'account' ? 'page' : undefined}>내 계정</a><button className="text-button" onClick={() => clearSession('로그아웃되었습니다.')}>로그아웃</button></nav>}
     </header>
-    {page === 'articles' && session ? <ArticleBrowser token={session.accessToken} onSessionExpired={clearSession} /> : <main className="layout">
+    {suspension && <section className="suspension-banner" role="alert" aria-label="계정 정지 안내"><h2>계정 이용이 정지되었습니다</h2><dl><div><dt>정지 사유</dt><dd>{suspension.reason}</dd></div><div><dt>정지 일시</dt><dd>{suspension.suspendedAt && Number.isFinite(Date.parse(suspension.suspendedAt)) ? `${koreanDate(suspension.suspendedAt)} (한국 시간)` : '과거 정지 일시가 등록되어 있지 않습니다.'}</dd></div></dl></section>}
+    {restoring ? <main className="news-layout"><p className="news-state" role="status">서버에서 로그인 정보를 확인하는 중입니다…</p></main> : page === 'articles' && session ? <ArticleBrowser token={session.accessToken} onSessionExpired={handleAuthFailure} /> : <main className="layout">
       <aside className="intro">
         <span className="eyebrow">YOUR NEXT CHAPTER</span>
         <h1>좋아하는 게임의<br />다음 이야기를<br /><span>함께 만나세요.</span></h1>
@@ -131,7 +171,7 @@ export default function App() {
         <h2 id="panel-title">{form ? signup ? '계정을 만들어 보세요' : '다시 만나 반가워요' : page === 'admin' ? '관리자 접근 확인' : '내 계정'}</h2>
         <p className="subtitle">{form ? signup ? '이메일로 간단하게 시작하세요.' : '로그인하고 GAMELOG를 시작하세요.' : '현재 계정의 인증 정보를 확인할 수 있어요.'}</p>
         {notice && <p className="notice" role="status">{notice}</p>}
-        {needsLogin && <p className="notice">로그인이 필요합니다. 새로고침 후에는 다시 로그인해 주세요.</p>}
+        {needsLogin && <p className="notice">로그인이 필요합니다.</p>}
         {error && <p className="error" role="alert">{error}</p>}
         {form ? <>
           <form onSubmit={submit}>
@@ -144,7 +184,7 @@ export default function App() {
           <dl className="profile"><div><dt>이메일</dt><dd>{session.user.email}</dd></div><div><dt>권한</dt><dd><span className="badge">{session.user.role === 'ADMIN' ? '관리자' : '일반 회원'}</span></dd></div><div><dt>계정 상태</dt><dd>{session.user.status === 'ACTIVE' ? '활성' : '정지'}</dd></div><div><dt>가입일</dt><dd>{new Date(session.user.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</dd></div></dl>
           {page === 'admin' ? <><p className="field-help">서버에서 현재 관리자 권한을 검사합니다.</p><button className="primary-button" disabled={pending} onClick={() => checkAccess(true)}>{pending ? '확인 중…' : '관리자 권한 확인'}<span aria-hidden="true">↗</span></button>{adminMessage && <p className="notice" role="status">{adminMessage}</p>}<button className="text-button back" onClick={() => navigate('account')}>내 계정으로 돌아가기</button></> : <><button className="primary-button" disabled={pending} onClick={() => checkAccess(false)}>{pending ? '확인 중…' : '내 정보 새로 확인'}<span aria-hidden="true">↻</span></button><button className="text-button back" onClick={() => { navigate('admin'); setNotice('') }}>관리자 페이지</button></>}
         </>}
-        <div className="session-note"><span aria-hidden="true">◈</span><p>로그인은 현재 탭에서만 유지됩니다.<br />새로고침하거나 인증이 만료되면 다시 로그인해 주세요.</p></div>
+        <div className="session-note"><span aria-hidden="true">◈</span><p>로그인은 현재 탭에서 유지되며, 새로고침 시 서버에서 다시 확인합니다.<br />인증이 만료되면 다시 로그인해 주세요.</p></div>
       </section>
     </main>}
     <footer className="footer"><span>© {new Date().getFullYear()} GAMELOG</span><span>게임을 좋아하는 우리를 위한 공간</span></footer>

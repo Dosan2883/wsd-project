@@ -2,6 +2,8 @@
 
 [기능별 상세 구현 계획](https://app.notion.com/p/416bcc84e50e8141854df4b416ab4bc5)의 **3번 → 1단계 회원가입·로그인과 권한**, **2단계를 위한 글 저장 기반과 로그인 후 목록·상세 조회** 구현입니다. React + TypeScript, Spring Boot + Java 21, Spring Security, JPA, Flyway를 사용합니다.
 
+인증 기능은 [개정 통합본의 3번 → 1단계](https://app.notion.com/p/41cbcc84e50e81cc9f17d4c607067235)를 기준으로 정지 사유·일시 안내와 새로고침 시 `/api/me` 재검증을 반영했습니다. 상세 응답 형식과 저장 정책은 [인증 API 문서](docs/auth-api.md)에 있습니다.
+
 ## 로컬 실행
 
 필수: JDK 21, Node.js 22.12 이상. Maven은 `backend/mvnw.cmd` 또는 `backend/mvnw`가 내려받습니다. Windows에서 Java 바로가기가 다른 JRE를 가리킨다면 `JAVA_HOME`을 실제 JDK 21 경로로 설정하세요.
@@ -19,7 +21,7 @@ PowerShell 7에서 직접 실행:
 
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk-21'
-$env:JWT_SECRET = $bytes = New-Object Byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes); $env:JWT_SECRET = [Convert]::ToBase64String($bytes)
+$bytes = New-Object Byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes); $env:JWT_SECRET = [Convert]::ToBase64String($bytes)
 cd backend
 .\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=demo'
 ```
@@ -64,7 +66,8 @@ $env:ADMIN_PASSWORD = [System.Net.NetworkCredential]::new('', $adminPassword).Pa
 - 가입 DTO는 이메일·비밀번호만 허용합니다. `role`, `status` 등 알 수 없는 필드를 보내면 400이며 계정을 만들지 않습니다.
 - JWT는 HS256만 허용하고 서명, `exp`, `iat`, `iss`, `aud`, `sub`, 선택적 `nbf`를 검증합니다. 유효기간 30분, 시계 오차 유예 0초. `JWT_SECRET`은 Base64 인코딩한 난수 32바이트 이상이어야 하며 누락·짧은 키로는 시작하지 않습니다.
 - 모든 보호 요청은 현재 DB의 role/status를 조회합니다. JWT의 role 주장을 신뢰하지 않으므로 기존 토큰도 회원 정지·관리자 권한 회수 직후 거절됩니다.
-- 브라우저 토큰은 React 메모리에만 저장합니다. localStorage·sessionStorage·쿠키를 사용하지 않습니다. 새로고침·만료·로그아웃 시 재로그인해야 합니다. 진행 중 요청은 화면 이동 시 취소하고 늦게 도착한 응답으로 로그인이 복원되지 않게 합니다.
+- 개정 계획의 3번 → 1단계에 맞춰 토큰·만료 시각만 탭 단위 `sessionStorage`에 저장합니다. 새로고침하면 `/api/me`로 현재 역할·상태를 재검증한 뒤 로그인 화면을 복원합니다. 검증 실패·만료·로그아웃 시 메모리와 저장소를 비우며, 진행 중 요청도 취소합니다. `localStorage`와 쿠키는 사용하지 않습니다.
+- 정지 계정은 로그인과 보호 API 모두 403과 `suspension.reason`, `suspension.suspendedAt`을 반환합니다. 화면은 사유·정지 일시를 한국 시간으로 안내합니다. 기존 DB는 V3 마이그레이션으로 확장하며 알 수 없는 과거 정지 시각은 미등록으로 보존합니다.
 - 로그아웃은 현재 클라이언트 토큰 제거입니다. 유출 토큰을 서버에서 즉시 폐기하는 블랙리스트, refresh token, 소셜 로그인, 이메일 인증, 비밀번호 재설정은 이 단계 범위에 없습니다.
 
 ## API

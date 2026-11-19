@@ -14,6 +14,7 @@ const reply = (body: unknown, status = 200) => ({ ok: status >= 200 && status < 
 const expired = vi.fn()
 
 beforeEach(() => {
+  sessionStorage.clear()
   window.history.replaceState(null, '', '/#/articles')
   expired.mockReset()
   vi.stubGlobal('fetch', vi.fn(async (input: string) => {
@@ -30,7 +31,7 @@ function show() { return render(<ArticleBrowser token="test-token" onSessionExpi
 describe('로그인 후 저장한 글 열람', () => {
   it('로그인 성공 직후 서버의 글 목록을 불러오고 상세를 연다', async () => {
     render(<App />)
-    expect(screen.getByText('로그인이 필요합니다. 새로고침 후에는 다시 로그인해 주세요.')).toBeInTheDocument()
+    expect(screen.getByText('로그인이 필요합니다.')).toBeInTheDocument()
     const actor = userEvent.setup()
     await actor.type(screen.getByLabelText('이메일'), 'reader@example.com')
     await actor.type(screen.getByLabelText('비밀번호'), 'valid-password')
@@ -102,7 +103,7 @@ describe('로그인 후 저장한 글 열람', () => {
   it('만료된인증이면다시로그인하도록요청한다', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(reply({ code: 'UNAUTHENTICATED', message: '다시 로그인해 주세요.' }, 401))
     show()
-    await waitFor(() => expect(expired).toHaveBeenCalledWith('다시 로그인해 주세요.'))
+    await waitFor(() => expect(expired).toHaveBeenCalledWith(expect.objectContaining({ message: '다시 로그인해 주세요.', status: 401 })))
   })
 
   it('상세의위험한외부주소를링크로만들지않는다', async () => {

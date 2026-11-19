@@ -1,6 +1,7 @@
 package com.gamenews.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -14,7 +15,25 @@ import org.springframework.web.bind.annotation.*;
 
 @RestControllerAdvice
 public class ApiErrors {
-    public record ErrorBody(String code, String message, Map<String, String> fields) {}
+    public record ErrorBody(String code, String message, Map<String, String> fields,
+                            @JsonInclude(JsonInclude.Include.NON_NULL) AccountSuspendedException.Suspension suspension) {
+        public ErrorBody(String code, String message, Map<String, String> fields) { this(code, message, fields, null); }
+    }
+
+    @ExceptionHandler(AccountSuspendedException.class)
+    ResponseEntity<ErrorBody> suspended(AccountSuspendedException error) {
+        return ResponseEntity.status(403).body(suspensionBody(error));
+    }
+
+    static ErrorBody suspensionBody(AccountSuspendedException error) {
+        return new ErrorBody("ACCOUNT_SUSPENDED", "정지된 계정입니다.", Map.of(), error.getSuspension());
+    }
+
+    static void writeSuspension(ObjectMapper mapper, HttpServletResponse response, AccountSuspendedException error) throws IOException {
+        response.setStatus(403);
+        response.setContentType("application/json;charset=UTF-8");
+        mapper.writeValue(response.getOutputStream(), suspensionBody(error));
+    }
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ErrorBody> api(ApiException e) {

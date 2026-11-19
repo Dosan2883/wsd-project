@@ -39,7 +39,7 @@ public class SecurityConfig {
             boolean valid = jwt.getExpiresAt() != null && jwt.getIssuedAt() != null
                 && jwt.getIssuedAt().isBefore(jwt.getExpiresAt())
                 && !jwt.getIssuedAt().isAfter(Instant.now())
-                && jwt.getAudience().contains(audience)
+                && jwt.getAudience() != null && jwt.getAudience().contains(audience)
                 && jwt.getSubject() != null && jwt.getSubject().matches("[1-9][0-9]{0,18}");
             return valid ? OAuth2TokenValidatorResult.success()
                 : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token"));
@@ -51,12 +51,12 @@ public class SecurityConfig {
 
     @Bean SecurityFilterChain security(HttpSecurity http, UserRepository users, ObjectMapper mapper) throws Exception {
         var entryPoint = (org.springframework.security.web.AuthenticationEntryPoint) (request, response, error) -> {
-            boolean suspended = error instanceof OAuth2AuthenticationException oauth
-                && "account_suspended".equals(oauth.getError().getErrorCode());
-            if (!suspended) response.setHeader("WWW-Authenticate", "Bearer");
-            ApiErrors.write(mapper, response, suspended ? 403 : 401,
-                suspended ? "ACCOUNT_SUSPENDED" : "UNAUTHENTICATED",
-                suspended ? "정지된 계정입니다." : "인증이 만료되었거나 유효하지 않습니다. 다시 로그인해 주세요.");
+            if (error instanceof AccountSuspendedException suspended) {
+                ApiErrors.writeSuspension(mapper, response, suspended);
+                return;
+            }
+            response.setHeader("WWW-Authenticate", "Bearer");
+            ApiErrors.write(mapper, response, 401, "UNAUTHENTICATED", "인증이 만료되었거나 유효하지 않습니다. 다시 로그인해 주세요.");
         };
         return http.csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -75,7 +75,7 @@ public class SecurityConfig {
                     } catch (NumberFormatException error) {
                         throw new OAuth2AuthenticationException("invalid_token");
                     }
-                    if (user.getStatus() != UserAccount.Status.ACTIVE) throw new OAuth2AuthenticationException("account_suspended");
+                    if (user.getStatus() != UserAccount.Status.ACTIVE) throw new AccountSuspendedException(user);
                     return new JwtAuthenticationToken(token, List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole())), token.getSubject());
                 }))).build();
     }

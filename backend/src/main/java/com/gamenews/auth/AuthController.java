@@ -24,8 +24,7 @@ public class AuthController {
     }
 
     private final AuthService auth;
-    private final UserRepository users;
-    public AuthController(AuthService auth, UserRepository users) { this.auth = auth; this.users = users; }
+    public AuthController(AuthService auth) { this.auth = auth; }
 
     @PostMapping("/auth/signup")
     ResponseEntity<AuthService.UserView> signup(@Valid @RequestBody Credentials request) {
@@ -39,7 +38,7 @@ public class AuthController {
 
     @GetMapping("/me")
     AuthService.UserView me(@AuthenticationPrincipal Jwt jwt) {
-        return AuthService.UserView.from(users.findById(Long.parseLong(jwt.getSubject())).orElseThrow());
+        return auth.currentUser(Long.parseLong(jwt.getSubject()));
     }
 
     @GetMapping("/admin/access")
