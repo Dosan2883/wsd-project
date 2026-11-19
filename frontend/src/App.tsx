@@ -10,8 +10,8 @@ import IngestionPanel from './IngestionPanel'
 type Page = 'login' | 'signup' | 'account' | 'admin' | 'articles' | 'ingestions'
 function initialPage(): Page {
   const path = window.location.hash.slice(2).split('?')[0]
-  if (path === 'articles' || path.startsWith('articles/')) return 'articles'
-  return ['signup', 'account', 'admin', 'ingestions'].includes(path) ? path as Page : 'login'
+  if (!path || path === 'articles' || path.startsWith('articles/')) return 'articles'
+  return ['login', 'signup', 'account', 'admin', 'ingestions'].includes(path) ? path as Page : 'articles'
 }
 
 export default function App() {
@@ -40,16 +40,16 @@ export default function App() {
     setAdminMessage('')
   }, [])
 
-  const clearSession = useCallback((message: string) => {
+  const clearSession = useCallback((message: string, keepArticleRoute = false) => {
     forgetSession()
     setSession(null)
     setSuspension(null)
-    navigate('login')
+    if (!keepArticleRoute || initialPage() !== 'articles') navigate('login')
     setNotice(message)
   }, [navigate])
 
   const handleAuthFailure = useCallback((failure: ApiError) => {
-    clearSession(failure.message)
+    clearSession(failure.message, true)
     if (failure.code === 'ACCOUNT_SUSPENDED') {
       setSuspension(failure.suspension ?? { reason: '자세한 정지 사유는 관리자에게 문의해 주세요.', suspendedAt: null })
     }
@@ -63,7 +63,7 @@ export default function App() {
         const user = await api<User>('/me', { token: storedSession!.accessToken, signal: controller.signal })
         if (controller.signal.aborted) return
         if (Date.parse(storedSession!.expiresAt) <= Date.now()) {
-          clearSession('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+          clearSession('로그인이 만료되었습니다. 다시 로그인해 주세요.', true)
           return
         }
         setSession({ ...storedSession!, tokenType: 'Bearer', user })
@@ -93,7 +93,7 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return
-    const timeout = window.setTimeout(() => clearSession('로그인이 만료되었습니다. 다시 로그인해 주세요.'), Math.max(0, Date.parse(session.expiresAt) - Date.now()))
+    const timeout = window.setTimeout(() => clearSession('로그인이 만료되었습니다. 다시 로그인해 주세요.', true), Math.max(0, Date.parse(session.expiresAt) - Date.now()))
     return () => window.clearTimeout(timeout)
   }, [session, clearSession])
 
@@ -149,17 +149,22 @@ export default function App() {
     } finally { if (!controller.signal.aborted) setPending(false) }
   }
 
-  const needsLogin = (page === 'account' || page === 'admin' || page === 'articles' || page === 'ingestions') && !session
+  const needsLogin = (page === 'account' || page === 'admin' || page === 'ingestions') && !session
   const form = page === 'login' || page === 'signup' || needsLogin
   const signup = page === 'signup'
   return <div className="shell">
     <header className="header">
-      <a href={session ? '#/articles' : '#/login'} className="brand" aria-label="GAMELOG 홈"><span className="brand-icon">G</span> GAMELOG<span className="brand-dot">.</span></a>
+      <a href="#/articles" className="brand" aria-label="GAMELOG 홈"><span className="brand-icon">G</span> GAMELOG<span className="brand-dot">.</span></a>
       <span className="header-caption">게임의 다음 소식을 만나는 곳</span>
       {session && <nav className="header-nav" aria-label="회원 메뉴"><a className="text-button" href="#/articles" aria-current={page === 'articles' ? 'page' : undefined}>글 목록</a>{session.user.role === 'ADMIN' && <a className="text-button" href="#/ingestions" aria-current={page === 'ingestions' ? 'page' : undefined}>수집 관리</a>}<a className="text-button" href="#/account" aria-current={page === 'account' ? 'page' : undefined}>내 계정</a><button className="text-button" onClick={() => clearSession('로그아웃되었습니다.')}>로그아웃</button></nav>}
+      {!session && !restoring && <nav className="header-nav" aria-label="계정 메뉴">
+        <a className="text-button" href="#/login" aria-current={page === 'login' ? 'page' : undefined}>로그인</a>
+        <a className="text-button" href="#/signup" aria-current={signup ? 'page' : undefined}>회원가입</a>
+      </nav>}
     </header>
     {suspension && <section className="suspension-banner" role="alert" aria-label="계정 정지 안내"><h2>계정 이용이 정지되었습니다</h2><dl><div><dt>정지 사유</dt><dd>{suspension.reason}</dd></div><div><dt>정지 일시</dt><dd>{suspension.suspendedAt && Number.isFinite(Date.parse(suspension.suspendedAt)) ? `${koreanDate(suspension.suspendedAt)} (한국 시간)` : '과거 정지 일시가 등록되어 있지 않습니다.'}</dd></div></dl></section>}
-    {restoring ? <main className="news-layout"><p className="news-state" role="status">서버에서 로그인 정보를 확인하는 중입니다…</p></main> : page === 'ingestions' && session ? <IngestionPanel token={session.accessToken} onAuthFailure={handleAuthFailure} /> : page === 'articles' && session ? <ArticleBrowser token={session.accessToken} onSessionExpired={handleAuthFailure} /> : <main className="layout">
+    {!restoring && page === 'articles' && notice && <p className="notice" role="status">{notice}</p>}
+    {restoring ? <main className="news-layout"><p className="news-state" role="status">서버에서 로그인 정보를 확인하는 중입니다…</p></main> : page === 'ingestions' && session ? <IngestionPanel token={session.accessToken} onAuthFailure={handleAuthFailure} /> : page === 'articles' ? <ArticleBrowser token={session?.accessToken} onSessionExpired={handleAuthFailure} /> : <main className="layout">
       <aside className="intro">
         <span className="eyebrow">YOUR NEXT CHAPTER</span>
         <h1>좋아하는 게임의<br />다음 이야기를<br /><span>함께 만나세요.</span></h1>

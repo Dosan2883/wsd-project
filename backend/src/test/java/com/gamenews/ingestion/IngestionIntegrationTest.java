@@ -34,6 +34,7 @@ class IngestionIntegrationTest {
     @Autowired ArticleRepository articles;
     @Autowired SourceRepository sources;
     @Autowired GameRepository games;
+    @Autowired ArticleStore articleStore;
     @Autowired UserRepository users;
     @Autowired PasswordEncoder passwords;
     @Autowired ObjectMapper json;
@@ -56,6 +57,12 @@ class IngestionIntegrationTest {
             var items = new ArrayList<JsonNode>(); json.readTree(input).path("appnews").path("newsitems").forEach(items::add); return items;
         }
     }
+
+    JsonNode announcement(long appId) {
+        return json.createObjectNode().put("appid", appId).put("gid", "20261119001").put("date", 1795000000)
+            .put("title", "선택한 게임 업데이트").put("contents", "[b]새 소식[/b]")
+            .put("feedname", "steam_community_announcements").put("url", "https://store.steampowered.com/news/app/" + appId);
+    }
     String token(UserAccount.Role role) throws Exception {
         users.deleteAll(); users.saveAndFlush(new UserAccount("operator@example.com", passwords.encode("test-password-123"), role));
         var response = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
@@ -73,6 +80,79 @@ class IngestionIntegrationTest {
         assertThat(articles.count()).isEqualTo(25); assertThat(runs.count()).isEqualTo(2);
         assertThat(articles.findAll()).allMatch(article -> article.getStatus() == Article.Status.PUBLISHED && !article.isDemo());
         assertThat(articles.findAll()).anyMatch(article -> article.getThumbnailUrl() != null);
+    }
+
+    @Test void 비회원이새게임을선택하면저장된뉴스와드롭다운이갱신되고정기수집에도포함된다() throws Exception {
+        long appId = 105600;
+        var items = List.of(announcement(appId));
+        doAnswer(call -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return items;
+        }).when(client).fetchOnDemand(appId);
+        doReturn(items).when(client).fetch(appId);
+
+        mvc.perform(get("/api/articles").param("steamAppId", "105600").param("gameName", "Terraria"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].excerpt").value("새 소식"))
+            .andExpect(jsonPath("$.items[0].game.name").value("Terraria"));
+        var registered = games.findBySteamAppId(appId).orElseThrow();
+        mvc.perform(get("/api/games")).andExpect(jsonPath("$[?(@.steamAppId == 105600)].name").value("Terraria"));
+        mvc.perform(get("/api/articles").param("gameId", registered.getId().toString()).param("q", "업데이트"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+        verify(client, times(1)).fetchOnDemand(appId);
+        assertThat(articles.count()).isEqualTo(1);
+
+        var scheduled = service.collect(IngestionRun.Trigger.SCHEDULED);
+        assertThat(scheduled.savedCount()).isEqualTo(25);
+        assertThat(scheduled.duplicateCount()).isEqualTo(1);
+        verify(client).fetch(appId);
+    }
+
+    @Test void 빈공지와Steam장애시조회가성공하고저장된기사는계속보인다() throws Exception {
+        long empty = 1172470;
+        doReturn(List.of()).when(client).fetchOnDemand(empty);
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(get("/api/articles").param("steamAppId", Long.toString(empty)).param("gameName", "Apex Legends"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty());
+        }
+        verify(client).fetchOnDemand(empty);
+
+        long outage = 413150;
+        var savedGame = catalog.game(outage, "Stardew Valley");
+        articleStore.store(new ArticleStore.Draft(catalog.source().getId(), savedGame.getId(), "existing",
+            "이미 저장된 공지", "이미 저장된 본문", "https://store.steampowered.com/news/app/413150", Instant.now(), false));
+        doThrow(new SteamNewsClient.FetchException("Steam HTTP 503")).when(client).fetchOnDemand(outage);
+        mvc.perform(get("/api/articles").param("gameId", savedGame.getId().toString()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].title").value("이미 저장된 공지"));
+        verify(client).fetchOnDemand(outage);
+    }
+
+    @Test void 같은게임동시조회는한번수집하고두요청에저장된뉴스를반환한다() throws Exception {
+        long appId = 440;
+        var started = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        doAnswer(call -> {
+            started.countDown();
+            if (!release.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("테스트 수집 대기 시간 초과");
+            return List.of(announcement(appId));
+        }).when(client).fetchOnDemand(appId);
+        Callable<Void> load = () -> {
+            mvc.perform(get("/api/articles").param("steamAppId", Long.toString(appId)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+            return null;
+        };
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(load);
+            try {
+                assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+                var second = executor.submit(load);
+                assertThatThrownBy(() -> second.get(200, TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+                release.countDown();
+                second.get(5, TimeUnit.SECONDS);
+            } finally { release.countDown(); }
+            first.get(5, TimeUnit.SECONDS);
+        }
+        verify(client).fetchOnDemand(appId);
+        assertThat(articles.count()).isEqualTo(1);
     }
     @Test void 숨김과수정된게임분류를재수집이덮어쓰지않는다() throws Exception {
         service.collect(IngestionRun.Trigger.MANUAL);
@@ -132,6 +212,7 @@ class IngestionIntegrationTest {
         assertThatThrownBy(() -> service.collect(IngestionRun.Trigger.MANUAL)).isInstanceOf(ApiException.class);
         properties.setEnabled(false);
         assertThatThrownBy(() -> service.collect(IngestionRun.Trigger.MANUAL)).isInstanceOf(ApiException.class);
+        service.collectForApp(105600, "Terraria");
         verifyNoInteractions(client); assertThat(runs.count()).isZero();
     }
     @Test void 관리자만수집과이력조회가가능하고요청마다현재상태를검사한다() throws Exception {

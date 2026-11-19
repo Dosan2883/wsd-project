@@ -1,15 +1,12 @@
 package com.gamenews.ingestion;
 
 import com.fasterxml.jackson.databind.*;
-import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.http.*;
-import java.nio.ByteBuffer;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.Flow;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -38,21 +35,29 @@ public class SteamNewsClient implements SteamGateway {
     }
 
     @Override public List<JsonNode> fetch(long appId) {
+        return fetch(appId, properties.getTimeoutMs(), properties.getMaxRetries());
+    }
+
+    @Override public List<JsonNode> fetchOnDemand(long appId) {
+        return fetch(appId, Math.min(properties.getTimeoutMs(), 5000), 0);
+    }
+
+    private List<JsonNode> fetch(long appId, int timeoutMs, int maxRetries) {
         if (Instant.now().isBefore(retryNotBefore)) throw new FetchException("Steam 요청 제한 안내에 따라 " + retryNotBefore + " 이후 재시도합니다.");
         URI uri = URI.create(endpoint + "?appid=" + appId + "&count=" + properties.getCount()
             + "&maxlength=0&feeds=steam_community_announcements&format=json");
-        for (int attempt = 0; attempt <= properties.getMaxRetries(); attempt++) {
-            var request = HttpRequest.newBuilder(uri).timeout(Duration.ofMillis(properties.getTimeoutMs()))
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            var request = HttpRequest.newBuilder(uri).timeout(Duration.ofMillis(timeoutMs))
                 .header("Accept", "application/json").header("User-Agent", "GameLog-News/0.1").GET().build();
-            var future = http.sendAsync(request, info -> new LimitedBody());
+            var future = http.sendAsync(request, info -> new SteamResponseBody(4 * 1024 * 1024));
             try {
-                var response = future.get(properties.getTimeoutMs(), TimeUnit.MILLISECONDS);
+                var response = future.get(timeoutMs, TimeUnit.MILLISECONDS);
                 int status = response.statusCode();
                 if (status != 200) {
                     long retryDelay = retryDelay(response, attempt);
                     if (status == 429 && retryDelay > 0) retryNotBefore = Instant.now().plusMillis(retryDelay);
                     boolean retryable = status == 429 || status >= 500 && status <= 599;
-                    if (retryable && attempt < properties.getMaxRetries() && retryDelay <= 30000) {
+                    if (retryable && attempt < maxRetries && retryDelay <= 30000) {
                         pause.sleep(retryDelay); continue;
                     }
                     throw new FetchException("Steam HTTP " + status + (retryDelay > 30000 ? " (서버가 안내한 대기 시간이 길어 다음 실행으로 미룹니다.)" : ""));
@@ -74,7 +79,7 @@ public class SteamNewsClient implements SteamGateway {
                 future.cancel(true); Thread.currentThread().interrupt(); throw new FetchException("Steam 요청이 중단되었습니다.");
             } catch (TimeoutException | ExecutionException error) {
                 future.cancel(true);
-                if (attempt >= properties.getMaxRetries()) throw new FetchException(error instanceof TimeoutException ? "Steam 요청 시간이 초과되었습니다." : "Steam 연결 또는 응답 수신에 실패했습니다.");
+                if (attempt >= maxRetries) throw new FetchException(error instanceof TimeoutException ? "Steam 요청 시간이 초과되었습니다." : "Steam 연결 또는 응답 수신에 실패했습니다.");
                 try { pause.sleep(250L << attempt); }
                 catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new FetchException("Steam 재시도가 중단되었습니다."); }
             }
@@ -91,23 +96,4 @@ public class SteamNewsClient implements SteamGateway {
         }
     }
 
-    /** 응답 본문까지 시간 제한을 적용하고 최대 4MiB까지만 수신한다. */
-    private static class LimitedBody implements HttpResponse.BodySubscriber<byte[]> {
-        private final CompletableFuture<byte[]> result = new CompletableFuture<>();
-        private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        private Flow.Subscription subscription;
-        public CompletionStage<byte[]> getBody() { return result; }
-        public void onSubscribe(Flow.Subscription subscription) { this.subscription = subscription; subscription.request(1); }
-        public void onNext(List<ByteBuffer> buffers) {
-            for (var buffer : buffers) {
-                if ((long) bytes.size() + buffer.remaining() > 4 * 1024 * 1024) {
-                    subscription.cancel(); result.completeExceptionally(new FetchException("Steam 응답이 크기 상한을 초과했습니다.")); return;
-                }
-                byte[] chunk = new byte[buffer.remaining()]; buffer.get(chunk); bytes.writeBytes(chunk);
-            }
-            subscription.request(1);
-        }
-        public void onError(Throwable error) { result.completeExceptionally(error); }
-        public void onComplete() { result.complete(bytes.toByteArray()); }
-    }
 }

@@ -69,22 +69,34 @@ class ArticleIntegrationTest {
         assertThat(articles.findById(id).orElseThrow().getExternalId()).isEqualTo("18446744073709551615");
     }
 
-    @Test void 비회원은목록상세게임정보를조회할수없다() throws Exception {
-        Long id = save("private", "인증 필요");
-        for (String path : List.of("/api/articles", "/api/articles/" + id, "/api/games")) {
-            mvc.perform(get(path)).andExpect(status().isUnauthorized());
+    @Test void 비회원은뉴스와게임을조회할수있고쓰기관리요청은거부된다() throws Exception {
+        Long id = save("public", "공개 뉴스");
+        mvc.perform(get("/api/articles"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].id").value(id));
+        mvc.perform(get("/api/articles/" + id))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.title").value("공개 뉴스"));
+        mvc.perform(get("/api/games"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$[0].steamAppId").value(570));
+        mvc.perform(get("/api/games/steam").param("page", "-1")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/admin/ingestions")).andExpect(status().isUnauthorized());
+        for (String path : List.of("/api/articles", "/api/articles/" + id, "/api/articles/" + id + "/comments", "/api/articles/" + id + "/likes", "/api/reports")) {
+            mvc.perform(post(path)).andExpect(status().isUnauthorized());
         }
     }
 
     @Test void 숨긴글은목록과직접주소에서노출하지않는다() throws Exception {
         Long id = save("hidden", "숨김 비밀 제목");
+        mvc.perform(get("/api/articles/" + id)).andExpect(status().isOk());
         var hidden = articles.findById(id).orElseThrow(); hidden.setStatus(Article.Status.HIDDEN); articles.saveAndFlush(hidden);
         mvc.perform(get("/api/articles").header("Authorization", "Bearer " + token))
             .andExpect(status().isOk()).andExpect(jsonPath("$.items").isEmpty()).andExpect(jsonPath("$.totalElements").value(0));
         mvc.perform(get("/api/articles/" + id).header("Authorization", "Bearer " + token))
             .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("ARTICLE_NOT_FOUND"));
-        mvc.perform(get("/api/articles/999999").header("Authorization", "Bearer " + token))
-            .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("ARTICLE_NOT_FOUND"));
+        mvc.perform(get("/api/articles")).andExpect(jsonPath("$.items").isEmpty());
+        for (Long unavailable : List.of(id, 999999L)) {
+            mvc.perform(get("/api/articles/" + unavailable))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("ARTICLE_NOT_FOUND"));
+        }
     }
 
     @Test void 페이지정렬게임필터검색과미분류를일관되게적용한다() throws Exception {
@@ -97,8 +109,12 @@ class ArticleIntegrationTest {
             .andExpect(jsonPath("$.items[0].id").value(first));
         mvc.perform(get("/api/articles").param("q", "  DOTA  ").param("gameId", game.getId().toString()).header("Authorization", "Bearer " + token))
             .andExpect(jsonPath("$.items[0].id").value(second)).andExpect(jsonPath("$.totalElements").value(1));
-        mvc.perform(get("/api/articles").param("gameId", game.getId().toString()).header("Authorization", "Bearer " + token))
+        mvc.perform(get("/api/articles").param("gameId", game.getId().toString()))
             .andExpect(jsonPath("$.totalElements").value(2));
+        mvc.perform(get("/api/articles").param("steamAppId", "570").param("q", "Dota"))
+            .andExpect(jsonPath("$.items[0].id").value(second)).andExpect(jsonPath("$.totalElements").value(1));
+        mvc.perform(get("/api/articles").param("steamAppId", "105600"))
+            .andExpect(jsonPath("$.items").isEmpty());
         mvc.perform(get("/api/articles").header("Authorization", "Bearer " + token))
             .andExpect(jsonPath("$.items[2].id").value(unclassified)).andExpect(jsonPath("$.items[2].game").isEmpty());
         mvc.perform(get("/api/games").header("Authorization", "Bearer " + token))
@@ -113,8 +129,8 @@ class ArticleIntegrationTest {
     }
 
     @Test void 잘못된조회인자는400이고빈검색은정상응답이다() throws Exception {
-        for (String params : List.of("page=-1", "size=0", "size=51", "gameId=-1", "gameId=abc", "page=abc", "q=" + "a".repeat(101))) {
-            mvc.perform(get("/api/articles?" + params).header("Authorization", "Bearer " + token)).andExpect(status().isBadRequest());
+        for (String params : List.of("page=-1", "size=0", "size=51", "gameId=-1", "gameId=abc", "page=abc", "steamAppId=4294967296", "q=" + "a".repeat(101))) {
+            mvc.perform(get("/api/articles?" + params)).andExpect(status().isBadRequest());
         }
         mvc.perform(get("/api/articles/abc").header("Authorization", "Bearer " + token)).andExpect(status().isBadRequest());
         mvc.perform(get("/api/articles").param("q", "없는제목").header("Authorization", "Bearer " + token))

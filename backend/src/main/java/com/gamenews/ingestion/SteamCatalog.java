@@ -3,6 +3,7 @@ package com.gamenews.ingestion;
 import com.gamenews.articles.*;
 import java.util.List;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -14,18 +15,38 @@ public class SteamCatalog {
     private final GameRepository games;
     public SteamCatalog(SourceRepository sources, GameRepository games) { this.sources = sources; this.games = games; }
     public Source prepare() {
-        var source = sources.findByCode("steam").orElseGet(() -> {
+        var source = source();
+        GAMES.forEach(seed -> game(seed.appId(), seed.name()));
+        return source;
+    }
+
+    public Source source() {
+        return sources.findByCode("steam").orElseGet(() -> {
             try { return sources.saveAndFlush(Source.steam()); }
             catch (DataIntegrityViolationException race) { return sources.findByCode("steam").orElseThrow(() -> race); }
         });
-        GAMES.forEach(seed -> game(seed.appId()));
-        return source;
     }
+
     public Game game(long appId) {
-        var seed = GAMES.stream().filter(item -> item.appId() == appId).findFirst().orElseThrow();
+        return game(appId, null);
+    }
+
+    public Game game(long appId, String fallbackName) {
         return games.findBySteamAppId(appId).orElseGet(() -> {
-            try { return games.saveAndFlush(new Game(seed.name(), appId)); }
+            var name = GAMES.stream().filter(seed -> seed.appId() == appId).map(Seed::name)
+                .findFirst().orElseGet(() -> cleanName(fallbackName, appId));
+            try { return games.saveAndFlush(new Game(name, appId)); }
             catch (DataIntegrityViolationException race) { return games.findBySteamAppId(appId).orElseThrow(() -> race); }
         });
+    }
+
+    public List<Game> allGames() { return games.findAll(Sort.by("id")); }
+
+    private static String cleanName(String hint, long appId) {
+        if (hint == null) return "Steam 게임 " + appId;
+        String name = hint.replaceAll("[\\p{Cntrl}\\p{Cf}]", " ").strip().replaceAll("\\s+", " ");
+        if (name.isBlank()) return "Steam 게임 " + appId;
+        if (name.length() <= 150) return name;
+        return name.substring(0, Character.isHighSurrogate(name.charAt(149)) ? 149 : 150);
     }
 }

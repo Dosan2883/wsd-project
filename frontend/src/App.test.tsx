@@ -10,7 +10,7 @@ const session = { accessToken: 'memory-only-token', tokenType: 'Bearer', expires
 const response = (body: unknown, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response
 
 beforeEach(() => {
-  window.history.replaceState(null, '', '/')
+  window.history.replaceState(null, '', '/#/login')
   vi.stubGlobal('fetch', vi.fn(async (input: string) => response(input === '/api/me' ? user : input.startsWith('/api/articles')
     ? { items: [], page: 0, size: 10, totalElements: 0, totalPages: 0 } : [])))
   localStorage.clear(); sessionStorage.clear()
@@ -118,7 +118,7 @@ describe('authentication user flows', () => {
     await act(async () => { fireEvent.submit(screen.getByRole('button', { name: '로그인' }).closest('form')!) })
     expect(screen.getByRole('heading', { name: '새로운 소식을 만나보세요' })).toBeInTheDocument()
     await act(async () => { vi.advanceTimersByTime(1100) })
-    expect(screen.getByRole('status')).toHaveTextContent('로그인이 만료되었습니다')
+    expect(screen.getByText('로그인이 만료되었습니다. 다시 로그인해 주세요.')).toBeInTheDocument()
   })
 
   it('does not restore a session from a late response after navigating away', async () => {

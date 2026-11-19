@@ -1,12 +1,12 @@
 # GAMELOG — 회원 인증과 Steam 뉴스 자동 수집
 
-[개정 기능별 상세 구현 계획](https://app.notion.com/p/41cbcc84e50e81cc9f17d4c607067235)의 **3번 → 1단계 회원 인증**, **2단계 Steam 뉴스 자동 수집·정제·공개**와 글 목록·상세 조회 구현입니다. React + TypeScript, Spring Boot + Java 21, Spring Security, JPA, Flyway를 사용합니다.
+[개정 기능별 상세 구현 계획](https://app.notion.com/p/41cbcc84e50e81cc9f17d4c607067235)의 **3번 → 1단계 회원 인증**, **2단계 Steam 뉴스 자동 수집·정제·공개**, **3단계 공개 뉴스 목록·상세·게임 필터** 구현입니다. React + TypeScript, Spring Boot + Java 21, Spring Security, JPA, Flyway를 사용합니다.
 
 인증 기능은 [개정 통합본의 3번 → 1단계](https://app.notion.com/p/41cbcc84e50e81cc9f17d4c607067235)를 기준으로 정지 사유·일시 안내와 새로고침 시 `/api/me` 재검증을 반영했습니다. 상세 응답 형식과 저장 정책은 [인증 API 문서](docs/auth-api.md)에 있습니다.
 
 ## 로컬 실행
 
-실제 Steam 수집 모드는 `backend`에서 `.\run-steam.ps1`로 실행합니다. 기본 게임 5종을 기동 약 10초 후부터 수집하고, 이후 이전 실행 종료 후 30분 간격으로 갱신합니다. 관리자로 로그인하면 **수집 관리**에서 즉시 수집과 이력 확인도 가능합니다. [2단계 수집·실행 가이드](docs/steam-ingestion.md)에 API·정제·설정·검증 절차가 있습니다.
+실제 Steam 수집 모드는 `backend`에서 `.\run-steam.ps1`로 실행합니다. 기본 5종과 이미 등록된 게임을 기동 약 10초 후부터 수집하고, 이전 실행 종료 후 30분 간격으로 갱신합니다. 뉴스 화면에서 게임을 선택하면 해당 게임의 공지도 바로 수집합니다. 관리자는 **수집 관리**에서 등록된 게임을 일괄 수집하고 이력을 확인할 수 있습니다. [Steam 수집·실행 가이드](docs/steam-ingestion.md)에 API·정제·설정·검증 절차가 있습니다.
 
 필수: JDK 21, Node.js 22.12 이상. Maven은 `backend/mvnw.cmd` 또는 `backend/mvnw`가 내려받습니다. Windows에서 Java 바로가기가 다른 JRE를 가리킨다면 `JAVA_HOME`을 실제 JDK 21 경로로 설정하세요.
 
@@ -36,7 +36,7 @@ npm ci
 npm run dev
 ```
 
-[http://127.0.0.1:5173](http://127.0.0.1:5173)에서 **회원가입 → 로그인 → 수집된 뉴스 목록 → 제목 선택 → 본문 확인 → 목록으로 돌아가기**를 실행합니다. 제목 검색과 게임 필터를 사용할 수 있으며 회원 메뉴의 ‘내 계정’에서 기존 인증·관리자 접근 확인도 가능합니다. Vite가 `/api`를 8080 포트로 전달하므로 CORS 허용 설정 없이 같은 출처로 요청합니다.
+[http://127.0.0.1:5173](http://127.0.0.1:5173)에 접속하면 로그인 없이 수집된 뉴스의 목록·상세를 볼 수 있습니다. 제목 검색, 게임 필터, 페이지는 주소에 저장됩니다. 로그인하면 ‘내 계정’을, 관리자라면 ‘수집 관리’를 이용할 수 있습니다. Vite가 `/api`를 8080 포트로 전달합니다.
 
 기본 DB는 `backend/data/gamenews.mv.db` 파일에 보존되며, 시작 시 Flyway가 `users`, `games`, `sources`, `articles` 테이블을 생성합니다. 기존 V1 DB는 V2 마이그레이션으로 확장됩니다. 파일 DB 경로는 **backend 디렉터리에서 실행**할 때를 기준으로 합니다. JWT 키를 새로 생성하면 이전 토큰은 무효화되지만 계정과 글은 유지됩니다. 운영에서는 동일한 비밀키를 안전한 환경변수/비밀 저장소로 주입하세요. `.env.example`은 설명용이며 자동 로드하지 않습니다.
 
@@ -46,7 +46,7 @@ npm run dev
 
 `Could not resolve placeholder 'JWT_SECRET'`이면 JWT 키가 없는 터미널에서 실행한 것입니다. 같은 터미널에서 키를 설정하거나 `run-steam.ps1`을 사용하세요. `.env.example`은 예시 파일이며 `.env` 파일을 만들어도 자동으로 로드하지 않습니다. 운영 실행에서는 계속 `JWT_SECRET`을 명시적으로 설정해야 합니다.
 
-서버 내부 `ArticleStore`를 Steam 수집 모듈에 연결했습니다. 게임 5종의 공식 공지를 BBCode·HTML 정제 후 자동 공개하며, 썸네일·발췌·실행 이력을 저장합니다. 글 API는 [docs/articles.md](docs/articles.md), 실제 수집은 [docs/steam-ingestion.md](docs/steam-ingestion.md)를 참고하세요.
+서버 내부 `ArticleStore`를 Steam 수집 모듈에 연결했습니다. 공식 공지를 BBCode·HTML 정제 후 자동 공개하며, 썸네일·발췌·실행 이력을 저장합니다. 글 API는 [docs/articles.md](docs/articles.md), 실제 수집은 [docs/steam-ingestion.md](docs/steam-ingestion.md)를 참고하세요.
 
 ## 관리자 계정
 
@@ -83,9 +83,9 @@ $env:ADMIN_PASSWORD = [System.Net.NetworkCredential]::new('', $adminPassword).Pa
 | GET | `/api/me` | 활성 회원 | 200 현재 회원 정보 |
 | GET | `/api/admin/access` | 활성 관리자 | 200 권한 확인 메시지 |
 | GET | `/api/health` | 공개 | 200 프로세스 상태 |
-| GET | `/api/articles?page=&size=&gameId=&q=` | 활성 회원 | 200 공개 글 목록 |
-| GET | `/api/articles/{id}` | 활성 회원 | 200 공개 글 상세 |
-| GET | `/api/games` | 활성 회원 | 200 게임 목록 |
+| GET | `/api/articles?page=&size=&gameId=&q=` | 공개 | 200 공개 글 목록 |
+| GET | `/api/articles/{id}` | 공개 | 200 공개 글 상세 |
+| GET | `/api/games` | 공개 | 200 게임 목록 |
 | POST | `/api/admin/ingestions` | 활성 관리자 | 200 즉시 수집 결과 |
 | GET | `/api/admin/ingestions?page=&size=` | 활성 관리자 | 200 수집 이력 |
 

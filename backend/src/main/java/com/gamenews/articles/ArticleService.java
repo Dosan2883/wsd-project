@@ -25,9 +25,9 @@ public class ArticleService {
     private final GameRepository games;
     public ArticleService(ArticleRepository articles, GameRepository games) { this.articles = articles; this.games = games; }
 
-    public ArticlePage list(int page, int size, Long gameId, String query) {
+    public ArticlePage list(int page, int size, Long gameId, Long steamAppId, String query) {
         String escaped = query.strip().toLowerCase(Locale.ROOT).replace("!", "!!").replace("%", "!%").replace("_", "!_");
-        var result = articles.findPublicPage(Article.Status.PUBLISHED, gameId, "%" + escaped + "%",
+        var result = articles.findPublicPage(Article.Status.PUBLISHED, gameId, steamAppId, "%" + escaped + "%",
             PageRequest.of(page, size, Sort.by(Sort.Order.desc("publishedAt"), Sort.Order.desc("id"))));
         var items = result.map(article -> new Summary(article.getId(), article.getTitle(), article.getExcerpt(),
             GameView.from(article.getGame()), source(article), article.getPublishedAt(), article.isDemo(), article.getThumbnailUrl())).getContent();
@@ -42,5 +42,6 @@ public class ArticleService {
     }
 
     public List<GameView> games() { return games.findAll(Sort.by("name")).stream().map(GameView::from).toList(); }
+    public Long steamAppId(Long gameId) { return games.findById(gameId).map(Game::getSteamAppId).orElse(null); }
     private static SourceView source(Article article) { return new SourceView(article.getSource().getCode(), article.getSource().getName()); }
 }

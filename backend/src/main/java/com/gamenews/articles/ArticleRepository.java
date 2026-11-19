@@ -12,7 +12,14 @@ public interface ArticleRepository extends JpaRepository<Article, Long> {
     Optional<Article> findByIdAndStatus(Long id, Article.Status status);
 
     @EntityGraph(attributePaths = {"source", "game"})
-    @Query("select a from Article a where a.status = :status and (:gameId is null or a.game.id = :gameId) and lower(a.title) like :pattern escape '!'")
+    @Query("""
+        select a from Article a left join a.game g
+        where a.status = :status
+          and (:gameId is null or g.id = :gameId)
+          and (:steamAppId is null or g.steamAppId = :steamAppId)
+          and lower(a.title) like :pattern escape '!'
+        """)
     Page<Article> findPublicPage(@Param("status") Article.Status status, @Param("gameId") Long gameId,
+                                @Param("steamAppId") Long steamAppId,
                                 @Param("pattern") String pattern, Pageable pageable);
 }

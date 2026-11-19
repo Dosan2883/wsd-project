@@ -10,6 +10,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -63,6 +64,7 @@ public class SecurityConfig {
             .requestCache(cache -> cache.disable())
             .authorizeHttpRequests(rules -> rules
                 .requestMatchers("/api/auth/signup", "/api/auth/login", "/api/health").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/articles", "/api/articles/{id}", "/api/games", "/api/games/steam").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated())
             .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)

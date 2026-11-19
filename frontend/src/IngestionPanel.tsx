@@ -65,8 +65,8 @@ export default function IngestionPanel({ token, onAuthFailure }: { token: string
 
   const running = collecting || !!history?.items.some(run => run.status === 'RUNNING' && Date.now() - Date.parse(run.startedAt) < 600000)
   return <main className="news-layout">
-    <div className="news-heading"><div><span className="eyebrow">관리자 · 뉴스 수집</span><h1>Steam 뉴스 수집 관리</h1><p>기본 5개 게임의 공식 소식을 수집하고 실행 결과를 확인합니다.</p></div></div>
-    <div className="ingestion-controls"><div><h2>자동 수집과 즉시 실행</h2><p>{history?.schedulingEnabled === false ? '현재 예약 수집은 꺼져 있습니다.' : `예약 수집은 ${Math.round((history?.intervalMs ?? 1800000) / 60000)}분 간격입니다.`} 즉시 실행도 같은 저장·중복 검사 과정을 사용합니다.</p><p className="field-help">Counter-Strike 2 · Dota 2 · PUBG: BATTLEGROUNDS · ELDEN RING · Baldur's Gate 3</p></div>
+    <div className="news-heading"><div><span className="eyebrow">관리자 · 뉴스 수집</span><h1>Steam 뉴스 수집 관리</h1><p>등록된 Steam 게임의 공식 소식을 수집하고 실행 결과를 확인합니다.</p></div></div>
+    <div className="ingestion-controls"><div><h2>자동 수집과 즉시 실행</h2><p>{history?.schedulingEnabled === false ? '현재 예약 수집은 꺼져 있습니다.' : `예약 수집은 ${Math.round((history?.intervalMs ?? 1800000) / 60000)}분 간격입니다.`} 지금 실행하면 등록된 게임을 일괄 수집합니다.</p></div>
       <button className="primary-button ingestion-start" disabled={running || history?.enabled === false} onClick={() => { void collect() }}>{history?.enabled === false ? '수집 비활성화' : running ? '수집 중…' : '지금 수집하기'}</button>
     </div>
     {error && <p className="error" role="alert">{error}</p>}

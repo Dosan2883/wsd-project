@@ -21,7 +21,7 @@ class LiveSteamIngestionTest {
         assertThat(first.fetchedCount()).isEqualTo(25); assertThat(first.failedCount()).isZero();
         for (var seed : SteamCatalog.GAMES) {
             var game = catalog.game(seed.appId());
-            assertThat(articles.findPublicPage(Article.Status.PUBLISHED, game.getId(), "%", PageRequest.of(0, 10)).getTotalElements()).isGreaterThan(0);
+            assertThat(articles.findPublicPage(Article.Status.PUBLISHED, game.getId(), null, "%", PageRequest.of(0, 10)).getTotalElements()).isGreaterThan(0);
         }
         var second = service.collect(IngestionRun.Trigger.MANUAL);
         assertThat(second.savedCount()).isZero(); assertThat(second.duplicateCount()).isEqualTo(25);
