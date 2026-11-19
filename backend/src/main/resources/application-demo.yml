@@ -1,0 +1,5 @@
+# 데모 콘텐츠는 이 프로필을 명시해서 실행할 때만 준비한다.
+spring:
+  config:
+    activate:
+      on-profile: demo

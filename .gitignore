@@ -1,0 +1,9 @@
+.cache/
+.env
+**/target/
+**/node_modules/
+**/dist/
+**/coverage/
+backend/data/
+*.log
+*.tsbuildinfo

@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:auth-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+auth:
+  # Public, test-only key. Never loaded by the main application.
+  jwt-secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+  issuer: game-news-api
+  audience: game-news-web
+  ttl-seconds: 1800
+  admin-email:
+  admin-password:
