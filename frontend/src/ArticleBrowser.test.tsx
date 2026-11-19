@@ -1,11 +1,11 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ArticleBrowser from './ArticleBrowser'
 import App from './App'
 
 const game = { id: 1, name: 'Dota 2', steamAppId: 570 }
-const summary = { id: 1, title: '[데모] Dota 2 소식', excerpt: '목록 발췌', game, source: { code: 'demo', name: '데모 출처' }, publishedAt: '2026-11-17T03:00:00Z', demo: true }
+const summary = { id: 1, title: 'Dota 2 소식', excerpt: '목록 발췌', game, source: { code: 'steam', name: 'Steam' }, publishedAt: '2026-11-17T03:00:00Z', demo: false }
 const article = { ...summary, body: '저장한 본문\n<script>실행하면 안 됩니다</script>', originalUrl: 'https://store.steampowered.com/app/570/', createdAt: '2026-11-17T03:00:00Z' }
 const list = { items: [summary], page: 0, size: 10, totalElements: 1, totalPages: 1 }
 const user = { id: 1, email: 'reader@example.com', role: 'USER', status: 'ACTIVE', createdAt: '2026-11-12T00:00:00Z' }
@@ -41,7 +41,7 @@ describe('로그인 후 저장한 글 열람', () => {
     expect(screen.getByRole('heading', { name: article.title })).toBeInTheDocument()
     expect(document.querySelector('.article-body script')).toBeNull()
     expect(fetch).toHaveBeenCalledWith('/api/articles/1', expect.objectContaining({ headers: { Authorization: 'Bearer test-token' } }))
-    expect(screen.getByRole('link', { name: '게임의 Steam 페이지 보기 ↗' })).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.getByRole('link', { name: '원문 보기 ↗' })).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
   it('검색과게임필터를서버에전달하고페이지를초기화한다', async () => {
@@ -110,7 +110,7 @@ describe('로그인 후 저장한 글 열람', () => {
     window.history.replaceState(null, '', '/#/articles/1')
     vi.mocked(fetch).mockResolvedValueOnce(reply({ ...article, originalUrl: 'javascript:alert(1)' }))
     show(); await screen.findByRole('heading', { name: article.title })
-    expect(screen.queryByRole('link', { name: /Steam 페이지/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /원문 보기/ })).not.toBeInTheDocument()
   })
 
   it('화면을나간뒤도착한글응답을반영하지않는다', async () => {
@@ -121,5 +121,14 @@ describe('로그인 후 저장한 글 열람', () => {
     await act(async () => resolve(reply(article)))
     expect(screen.queryByText(article.title)).not.toBeInTheDocument()
     expect(expired).not.toHaveBeenCalled()
+  })
+
+  it('검증된Steam썸네일을표시하고실패한이미지는숨긴다', async () => {
+    vi.mocked(fetch).mockImplementation(async input => reply(String(input) === '/api/games' ? [game] : { ...list, items: [{ ...summary, thumbnailUrl: 'https://clan.fastly.steamstatic.com/images/1/test.jpg' }] }))
+    const view = show(); await screen.findByRole('link', { name: summary.title })
+    const image = view.container.querySelector('img')!
+    expect(image).toHaveAttribute('referrerpolicy', 'no-referrer')
+    fireEvent.error(image)
+    expect(image).toHaveAttribute('hidden')
   })
 })

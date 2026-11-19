@@ -4,7 +4,7 @@ param()
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path -Parent $PSScriptRoot
 $cacheDirectory = Join-Path $projectDirectory '.cache'
-$logPath = Join-Path $cacheDirectory 'backend-demo-startup.log'
+$logPath = Join-Path $cacheDirectory 'backend-steam-startup.log'
 
 # 현재 프로세스에서만 JDK와 키를 준비하고 시스템 설정은 변경하지 않는다.
 $javaCandidates = @($env:JAVA_HOME, (Join-Path $env:ProgramFiles 'Java\jdk-21'))
@@ -37,7 +37,7 @@ if ([string]::IsNullOrWhiteSpace($env:JWT_SECRET)) {
     try { $randomGenerator.GetBytes($randomBytes) }
     finally { $randomGenerator.Dispose() }
     $env:JWT_SECRET = [Convert]::ToBase64String($randomBytes)
-    Write-Host '로컬 데모용 JWT 키를 생성했습니다. 새 터미널에서 실행하면 기존 토큰은 만료되므로 다시 로그인해 주세요.'
+    Write-Host '로컬 실행용 JWT 키를 생성했습니다. 새 터미널에서 실행하면 기존 토큰은 만료되므로 다시 로그인해 주세요.'
 } else {
     try { $decodedKey = [Convert]::FromBase64String($env:JWT_SECRET) }
     catch { throw 'JWT_SECRET은 Base64 문자열이어야 합니다. 키 값은 로그에 붙여 넣지 마세요.' }
@@ -46,8 +46,8 @@ if ([string]::IsNullOrWhiteSpace($env:JWT_SECRET)) {
 
 New-Item -ItemType Directory -Path $cacheDirectory -Force | Out-Null
 $repositoryDirectory = Join-Path $cacheDirectory 'm2'
-$mavenArguments = @("-Dmaven.repo.local=$repositoryDirectory", '-B', 'spring-boot:run', '-Dspring-boot.run.profiles=demo')
-Write-Host "API 서버를 데모 프로필로 실행합니다. 로그: $logPath"
+$mavenArguments = @("-Dmaven.repo.local=$repositoryDirectory", '-B', 'spring-boot:run', '-Dspring-boot.run.profiles=steam')
+Write-Host "API 서버를 steam 프로필로 실행합니다. 로그: $logPath"
 Write-Host '서버 종료는 Ctrl+C, 화면 주소는 http://127.0.0.1:5173 입니다.'
 
 Push-Location $PSScriptRoot

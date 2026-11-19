@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, ApiError } from './api'
 import type { ArticleDetail, ArticlePage, Game } from './articles'
-import { koreanDate } from './articles'
+import { koreanDate, trustedThumbnail } from './articles'
 
 function readRoute() {
   const url = new URL(window.location.hash.slice(1) || '/articles', window.location.origin)
@@ -90,9 +90,9 @@ export default function ArticleBrowser({ token, onSessionExpired }: { token: str
     {error && <div className="news-state"><p className="error" role="alert">{error}</p><button className="filter-button" onClick={() => setRetry(value => value + 1)}>다시 시도</button>{(route.id || route.invalid) && <a className="text-button" href={listUrl(route.page)}>목록으로 돌아가기</a>}</div>}
     {!loading && list && <>
       <div className="list-summary"><h2>공개된 글 <span>{list.totalElements}</span></h2><span>최신 발행순</span></div>
-      {list.items.some(article => article.demo) && <p className="demo-notice">데모 표시가 있는 글은 열람 기능을 확인하기 위한 예시이며, 실제 수집한 뉴스가 아닙니다.</p>}
       {list.items.length === 0 ? <div className="news-state"><h2>{route.q || route.gameId ? '검색 결과가 없습니다' : '아직 공개된 글이 없습니다'}</h2><p>{route.q || route.gameId ? '다른 검색어나 게임을 선택해 보세요.' : '새로운 소식이 준비되면 이곳에 표시됩니다.'}</p>{(route.q || route.gameId || route.page > 0) && <a href="#/articles" className="text-button">전체 글 보기</a>}</div> : <div className="article-grid">{list.items.map(article => <article className="article-card" key={article.id}>
-        <div className="article-card-meta"><span className="game-label">{article.game?.name ?? '미분류'}</span>{article.demo && <span className="demo-badge">데모</span>}</div>
+        {trustedThumbnail(article.thumbnailUrl) && <img key={article.thumbnailUrl} className="article-thumbnail" src={trustedThumbnail(article.thumbnailUrl)!} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={event => { event.currentTarget.hidden = true }} />}
+        <div className="article-card-meta"><span className="game-label">{article.game?.name ?? '미분류'}</span></div>
         <h3><a href={`#/articles/${article.id}${route.search}`}>{article.title}</a></h3><p>{article.excerpt}</p><div className="article-card-footer"><span>{article.source.name}</span><time dateTime={article.publishedAt}>{koreanDate(article.publishedAt)}</time></div>
       </article>)}</div>}
       {list.totalPages > 1 && <nav className="pagination" aria-label="글 목록 페이지">
@@ -104,11 +104,11 @@ export default function ArticleBrowser({ token, onSessionExpired }: { token: str
     {!loading && detail && <>
       <a href={listUrl(route.page)} className="back-to-list">← 글 목록으로</a>
       <article className="article-detail">
-        <div className="article-card-meta"><span className="game-label">{detail.game?.name ?? '미분류'}</span>{detail.demo && <span className="demo-badge">데모</span>}</div>
+        {trustedThumbnail(detail.thumbnailUrl) && <img key={detail.thumbnailUrl} className="detail-thumbnail" src={trustedThumbnail(detail.thumbnailUrl)!} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={event => { event.currentTarget.hidden = true }} />}
+        <div className="article-card-meta"><span className="game-label">{detail.game?.name ?? '미분류'}</span></div>
         <h2>{detail.title}</h2><div className="detail-meta"><span>{detail.source.name}</span><time dateTime={detail.publishedAt}>{koreanDate(detail.publishedAt)} (한국 시간)</time></div>
-        {detail.demo && <p className="demo-notice">열람 기능 확인용 데모 콘텐츠입니다. 실제 뉴스나 실제 기사 원문이 아닙니다.</p>}
         <div className="article-body">{detail.body}</div>
-        {link && <a href={link} target="_blank" rel="noopener noreferrer" className="original-link">{detail.demo ? '게임의 Steam 페이지 보기' : '원문 보기'} ↗</a>}
+        {link && <a href={link} target="_blank" rel="noopener noreferrer" className="original-link">원문 보기 ↗</a>}
       </article>
     </>}
   </main>

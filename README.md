@@ -1,21 +1,23 @@
-# GAMELOG — 회원 인증과 글 저장·조회
+# GAMELOG — 회원 인증과 Steam 뉴스 자동 수집
 
-[기능별 상세 구현 계획](https://app.notion.com/p/416bcc84e50e8141854df4b416ab4bc5)의 **3번 → 1단계 회원가입·로그인과 권한**, **2단계를 위한 글 저장 기반과 로그인 후 목록·상세 조회** 구현입니다. React + TypeScript, Spring Boot + Java 21, Spring Security, JPA, Flyway를 사용합니다.
+[개정 기능별 상세 구현 계획](https://app.notion.com/p/41cbcc84e50e81cc9f17d4c607067235)의 **3번 → 1단계 회원 인증**, **2단계 Steam 뉴스 자동 수집·정제·공개**와 글 목록·상세 조회 구현입니다. React + TypeScript, Spring Boot + Java 21, Spring Security, JPA, Flyway를 사용합니다.
 
 인증 기능은 [개정 통합본의 3번 → 1단계](https://app.notion.com/p/41cbcc84e50e81cc9f17d4c607067235)를 기준으로 정지 사유·일시 안내와 새로고침 시 `/api/me` 재검증을 반영했습니다. 상세 응답 형식과 저장 정책은 [인증 API 문서](docs/auth-api.md)에 있습니다.
 
 ## 로컬 실행
 
+실제 Steam 수집 모드는 `backend`에서 `.\run-steam.ps1`로 실행합니다. 기본 게임 5종을 기동 약 10초 후부터 수집하고, 이후 이전 실행 종료 후 30분 간격으로 갱신합니다. 관리자로 로그인하면 **수집 관리**에서 즉시 수집과 이력 확인도 가능합니다. [2단계 수집·실행 가이드](docs/steam-ingestion.md)에 API·정제·설정·검증 절차가 있습니다.
+
 필수: JDK 21, Node.js 22.12 이상. Maven은 `backend/mvnw.cmd` 또는 `backend/mvnw`가 내려받습니다. Windows에서 Java 바로가기가 다른 JRE를 가리킨다면 `JAVA_HOME`을 실제 JDK 21 경로로 설정하세요.
 
-PowerShell 터미널 1 (데모 글 3건을 실제 서버 DB에 준비):
+PowerShell 터미널 1 (실제 Steam 뉴스 수집):
 
 ```powershell
 cd backend
-.\run-demo.ps1
+.\run-steam.ps1
 ```
 
-실행 스크립트가 JDK 21을 선택하고, 현재 터미널에 `JWT_SECRET`이 없으면 난수 키를 생성합니다. 키 값은 출력하거나 파일에 저장하지 않습니다. 데모 프로필로 실행하며 전체 서버 로그는 `.cache/backend-demo-startup.log`에 저장합니다. 다음과 같이 직접 실행할 수도 있습니다. 환경변수 설정은 **새 터미널마다** 필요합니다.
+실행 스크립트가 JDK 21을 선택하고, 현재 터미널에 `JWT_SECRET`이 없으면 난수 키를 생성합니다. 키 값은 출력하거나 파일에 저장하지 않습니다. Steam 수집 프로필로 실행하며 전체 서버 로그는 `.cache/backend-steam-startup.log`에 저장합니다. 다음과 같이 직접 실행할 수도 있습니다. 환경변수 설정은 **새 터미널마다** 필요합니다.
 
 PowerShell 7에서 직접 실행:
 
@@ -23,7 +25,7 @@ PowerShell 7에서 직접 실행:
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk-21'
 $bytes = New-Object Byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes); $env:JWT_SECRET = [Convert]::ToBase64String($bytes)
 cd backend
-.\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=demo'
+.\mvnw.cmd spring-boot:run '-Dspring-boot.run.profiles=steam'
 ```
 
 PowerShell 터미널 2:
@@ -34,17 +36,17 @@ npm ci
 npm run dev
 ```
 
-[http://127.0.0.1:5173](http://127.0.0.1:5173)에서 **회원가입 → 로그인 → 데모 글 목록 → 제목 선택 → 본문 확인 → 목록으로 돌아가기**를 실행합니다. 제목 검색과 게임 필터를 사용할 수 있으며 회원 메뉴의 ‘내 계정’에서 기존 인증·관리자 접근 확인도 가능합니다. Vite가 `/api`를 8080 포트로 전달하므로 CORS 허용 설정 없이 같은 출처로 요청합니다.
+[http://127.0.0.1:5173](http://127.0.0.1:5173)에서 **회원가입 → 로그인 → 수집된 뉴스 목록 → 제목 선택 → 본문 확인 → 목록으로 돌아가기**를 실행합니다. 제목 검색과 게임 필터를 사용할 수 있으며 회원 메뉴의 ‘내 계정’에서 기존 인증·관리자 접근 확인도 가능합니다. Vite가 `/api`를 8080 포트로 전달하므로 CORS 허용 설정 없이 같은 출처로 요청합니다.
 
 기본 DB는 `backend/data/gamenews.mv.db` 파일에 보존되며, 시작 시 Flyway가 `users`, `games`, `sources`, `articles` 테이블을 생성합니다. 기존 V1 DB는 V2 마이그레이션으로 확장됩니다. 파일 DB 경로는 **backend 디렉터리에서 실행**할 때를 기준으로 합니다. JWT 키를 새로 생성하면 이전 토큰은 무효화되지만 계정과 글은 유지됩니다. 운영에서는 동일한 비밀키를 안전한 환경변수/비밀 저장소로 주입하세요. `.env.example`은 설명용이며 자동 로드하지 않습니다.
 
-데모 프로필은 게임별 예시 글 3건을 출처·외부 ID 기준으로 한 번만 저장합니다. 서버를 재시작해도 중복되지 않고 기존 내용·숨김 상태를 덮어쓰지 않습니다. 글과 화면에는 **데모**를 표시하며 실제 Steam 기사 수집 성공을 의미하지 않습니다. 새 DB에 예시 데이터를 넣지 않으려면 프로필 인자 없이 실행하세요. 프로필을 끄더라도 이미 DB에 저장한 글은 유지됩니다.
+예시 글 생성 기능은 제거했습니다. V5 마이그레이션이 기존 데모 글·전용 출처와 기사 없는 데모 전용 게임을 삭제하며 실제 뉴스와 계정은 보존합니다.
 
 같은 파일 DB를 사용하는 API 서버는 하나만 실행하세요. `Process terminated with exit code: 1` 위쪽 로그에 `The file is locked`가 있으면 기존 API 서버가 DB를 사용 중입니다. 기존 서버를 실행한 터미널에서 `Ctrl+C`로 종료한 뒤 다시 실행하세요. 종료 후에도 계정과 글은 파일 DB에 유지됩니다.
 
-`Could not resolve placeholder 'JWT_SECRET'`이면 JWT 키가 없는 터미널에서 실행한 것입니다. 같은 터미널에서 키를 설정하거나 `run-demo.ps1`을 사용하세요. `.env.example`은 예시 파일이며 `.env` 파일을 만들어도 자동으로 로드하지 않습니다. 운영 실행에서는 계속 `JWT_SECRET`을 명시적으로 설정해야 합니다.
+`Could not resolve placeholder 'JWT_SECRET'`이면 JWT 키가 없는 터미널에서 실행한 것입니다. 같은 터미널에서 키를 설정하거나 `run-steam.ps1`을 사용하세요. `.env.example`은 예시 파일이며 `.env` 파일을 만들어도 자동으로 로드하지 않습니다. 운영 실행에서는 계속 `JWT_SECRET`을 명시적으로 설정해야 합니다.
 
-서버 내부 `ArticleStore`가 기본 검증·중복 방지·자동 공개 저장을 담당합니다. 일반 회원의 글 작성 API와 관리자 수동 작성 화면은 추가하지 않았습니다. 다음 수집 모듈이 이 저장 경로를 호출하도록 연결할 수 있습니다. 수집 예약 실행·Steam 실호출·수집 이력은 후속 작업입니다. API와 데모 확인 절차는 [docs/articles.md](docs/articles.md)를 참고하세요.
+서버 내부 `ArticleStore`를 Steam 수집 모듈에 연결했습니다. 게임 5종의 공식 공지를 BBCode·HTML 정제 후 자동 공개하며, 썸네일·발췌·실행 이력을 저장합니다. 글 API는 [docs/articles.md](docs/articles.md), 실제 수집은 [docs/steam-ingestion.md](docs/steam-ingestion.md)를 참고하세요.
 
 ## 관리자 계정
 
@@ -84,6 +86,8 @@ $env:ADMIN_PASSWORD = [System.Net.NetworkCredential]::new('', $adminPassword).Pa
 | GET | `/api/articles?page=&size=&gameId=&q=` | 활성 회원 | 200 공개 글 목록 |
 | GET | `/api/articles/{id}` | 활성 회원 | 200 공개 글 상세 |
 | GET | `/api/games` | 활성 회원 | 200 게임 목록 |
+| POST | `/api/admin/ingestions` | 활성 관리자 | 200 즉시 수집 결과 |
+| GET | `/api/admin/ingestions?page=&size=` | 활성 관리자 | 200 수집 이력 |
 
 `/api/admin/access`는 1단계 서버 권한 확인용 API입니다. 신고·회원 관리 기능은 아직 포함하지 않습니다. 회원 정지·권한 변경은 이후 관리자 기능에서 연결할 수 있게 엔티티와 요청 시 검사를 마련했습니다.
 
@@ -97,9 +101,11 @@ npm test
 npm run build
 ```
 
-데모 프로필로 서버 두 개가 실행 중일 때 프로젝트 루트에서 `node scripts/http-smoke.mjs --expect-demo`를 실행하면 실제 Vite 프록시를 통한 가입·로그인·인증·권한 거절과 데모 3건의 목록·상세·게임 필터를 검증합니다. 실행마다 로컬 DB에 임의 이메일의 테스트 계정 1개가 생성됩니다. 데모가 없는 환경은 `--expect-demo` 없이 실행할 수 있습니다.
+API·프런트엔드 서버가 실행 중일 때 프로젝트 루트에서 `node scripts/http-smoke.mjs`를 실행하면 Vite 프록시를 통한 가입·로그인·인증·권한 거절과 저장된 뉴스의 목록·상세·게임 필터를 검증합니다. 실행마다 로컬 DB에 임의 이메일의 테스트 계정 1개가 생성됩니다.
 
-글 테스트는 공개/숨김 직접 접근, 미분류, 검색 특수문자, 안정된 페이지 정렬, 중복·동시 저장, 데모 재실행, 정지 회원 거절을 포함합니다. 화면 테스트는 로그인 직후 글 목록, 상세 열람, 검색·필터·페이지 이동, 빈 결과, 통신 오류·재시도, 인증 만료, 외부 링크 검사와 일반 텍스트 본문 표시를 확인합니다.
+글 테스트는 공개/숨김 직접 접근, 미분류, 검색 특수문자, 안정된 페이지 정렬, 중복·동시 저장, 데모 제거 이관, 정지 회원 거절을 포함합니다. 화면 테스트는 로그인 직후 글 목록, 상세 열람, 검색·필터·페이지 이동, 빈 결과, 통신 오류·재시도, 인증 만료, 외부 링크 검사와 일반 텍스트 본문 표시를 확인합니다.
+
+2단계는 실제 응답 자료 기반의 정제·썸네일·중복·숨김/분류 보존, 동시 수집 409, 실행권 만료 복구, HTTP 오류·재시도·시간 제한·응답 상한을 검증합니다. 관리자 화면은 모의 API로 검증합니다. 실제 Steam 호출 테스트는 `STEAM_LIVE_TEST=true`일 때만 실행하며 별도 파일 DB를 사용합니다. 2026-11-19 실호출은 5종·25건 저장 후 연속 수집에서 신규 0건·중복 25건으로 통과했습니다.
 
 백엔드 테스트는 실제 Spring Security 필터·서명 JWT·JPA·Flyway·H2 DB로 HTTP 요청을 검증합니다. 가입/해시 저장, 동시·중복 이메일, 관리자 주입, 입력 오류, 자격 불일치, 미인증, 만료·변조·다른 알고리즘·잘못된 issuer/audience·필수 claim 누락, 관리자 권한 회수, 정지 전 JWT, 삭제 계정을 포함합니다. 프런트엔드는 가입 후 로그인 안내, 인증 헤더, 로그아웃·새로고침·만료, 관리자 거절·정지·통신 실패·늦은 응답을 검증합니다. UI 테스트의 API 응답은 모의 응답입니다.
 

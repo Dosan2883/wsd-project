@@ -1,0 +1,4 @@
+ingestion:
+  steam:
+    enabled: true
+    scheduling-enabled: ${STEAM_SCHEDULING_ENABLED:true}

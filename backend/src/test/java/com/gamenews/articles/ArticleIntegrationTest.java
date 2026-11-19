@@ -12,7 +12,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.ApplicationContext;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -32,7 +31,6 @@ class ArticleIntegrationTest {
     @Autowired UserRepository users;
     @Autowired PasswordEncoder encoder;
     @Autowired jakarta.validation.Validator validator;
-    @Autowired ApplicationContext context;
     private Source source;
     private Game game;
     private String token;
@@ -155,18 +153,6 @@ class ArticleIntegrationTest {
         assertThatThrownBy(() -> store.store(draft("unknown", "제목", 999999L, publishedAt))).isInstanceOf(ApiException.class);
         assertThatThrownBy(() -> store.store(draft("blank", "  ", game.getId(), publishedAt))).isInstanceOf(ApiException.class);
         assertThat(articles.count()).isZero();
-    }
-
-    @Test void 데모프로필은명시적으로만활성화되고재실행해도중복되지않는다() {
-        assertThat(context.getBeansOfType(DemoArticles.class)).isEmpty();
-        var seed = new DemoArticles(games, sources, store);
-        seed.run(null); seed.run(null);
-        assertThat(articles.count()).isEqualTo(3);
-        assertThat(articles.findAll()).allMatch(Article::isDemo);
-        var hidden = articles.findAll().getFirst(); hidden.setStatus(Article.Status.HIDDEN); articles.saveAndFlush(hidden);
-        seed.run(null);
-        assertThat(articles.count()).isEqualTo(3);
-        assertThat(articles.findById(hidden.getId()).orElseThrow().getStatus()).isEqualTo(Article.Status.HIDDEN);
     }
 
     @Test void 정지전토큰으로글을조회할수없다() throws Exception {

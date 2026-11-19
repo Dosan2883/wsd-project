@@ -11,6 +11,10 @@ public class Game {
     private String name;
     @Column(name = "steam_app_id", nullable = false, unique = true)
     private Long steamAppId;
+    @Column(name = "igdb_id")
+    private Long igdbId;
+    @Column(name = "itad_id", length = 36)
+    private String itadId;
 
     protected Game() {}
     public Game(String name, Long steamAppId) { this.name = name; this.steamAppId = steamAppId; }

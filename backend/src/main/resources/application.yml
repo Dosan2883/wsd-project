@@ -21,3 +21,12 @@ auth:
   ttl-seconds: 1800
   admin-email: ${ADMIN_EMAIL:}
   admin-password: ${ADMIN_PASSWORD:}
+ingestion:
+  steam:
+    enabled: ${STEAM_INGESTION_ENABLED:true}
+    scheduling-enabled: ${STEAM_SCHEDULING_ENABLED:true}
+    count: ${STEAM_NEWS_COUNT:20}
+    timeout-ms: 10000
+    max-retries: 2
+    interval-ms: 1800000
+    initial-delay-ms: 10000

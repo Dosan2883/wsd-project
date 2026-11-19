@@ -18,3 +18,7 @@ auth:
   ttl-seconds: 1800
   admin-email:
   admin-password:
+ingestion:
+  steam:
+    enabled: false
+    scheduling-enabled: false

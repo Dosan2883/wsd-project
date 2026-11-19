@@ -1,0 +1,37 @@
+[
+  {
+    "appId": 730,
+    "url": "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=730&count=5&maxlength=0&feeds=steam_community_announcements&format=json",
+    "fetchedAt": "2026-11-19T02:44:40.8583999Z",
+    "statusCode": 200,
+    "count": 5
+  },
+  {
+    "appId": 570,
+    "url": "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=570&count=5&maxlength=0&feeds=steam_community_announcements&format=json",
+    "fetchedAt": "2026-11-19T02:44:41.2483547Z",
+    "statusCode": 200,
+    "count": 5
+  },
+  {
+    "appId": 578080,
+    "url": "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=578080&count=5&maxlength=0&feeds=steam_community_announcements&format=json",
+    "fetchedAt": "2026-11-19T02:44:41.5130403Z",
+    "statusCode": 200,
+    "count": 5
+  },
+  {
+    "appId": 1245620,
+    "url": "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=1245620&count=5&maxlength=0&feeds=steam_community_announcements&format=json",
+    "fetchedAt": "2026-11-19T02:44:41.7274516Z",
+    "statusCode": 200,
+    "count": 5
+  },
+  {
+    "appId": 1086940,
+    "url": "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=1086940&count=5&maxlength=0&feeds=steam_community_announcements&format=json",
+    "fetchedAt": "2026-11-19T02:44:41.9755754Z",
+    "statusCode": 200,
+    "count": 5
+  }
+]

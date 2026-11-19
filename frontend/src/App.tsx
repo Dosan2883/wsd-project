@@ -5,12 +5,13 @@ import type { Session, Suspension, User } from './api'
 import ArticleBrowser from './ArticleBrowser'
 import { forgetSession, readSession, rememberSession } from './session'
 import { koreanDate } from './articles'
+import IngestionPanel from './IngestionPanel'
 
-type Page = 'login' | 'signup' | 'account' | 'admin' | 'articles'
+type Page = 'login' | 'signup' | 'account' | 'admin' | 'articles' | 'ingestions'
 function initialPage(): Page {
   const path = window.location.hash.slice(2).split('?')[0]
   if (path === 'articles' || path.startsWith('articles/')) return 'articles'
-  return ['signup', 'account', 'admin'].includes(path) ? path as Page : 'login'
+  return ['signup', 'account', 'admin', 'ingestions'].includes(path) ? path as Page : 'login'
 }
 
 export default function App() {
@@ -148,17 +149,17 @@ export default function App() {
     } finally { if (!controller.signal.aborted) setPending(false) }
   }
 
-  const needsLogin = (page === 'account' || page === 'admin' || page === 'articles') && !session
+  const needsLogin = (page === 'account' || page === 'admin' || page === 'articles' || page === 'ingestions') && !session
   const form = page === 'login' || page === 'signup' || needsLogin
   const signup = page === 'signup'
   return <div className="shell">
     <header className="header">
       <a href={session ? '#/articles' : '#/login'} className="brand" aria-label="GAMELOG 홈"><span className="brand-icon">G</span> GAMELOG<span className="brand-dot">.</span></a>
       <span className="header-caption">게임의 다음 소식을 만나는 곳</span>
-      {session && <nav className="header-nav" aria-label="회원 메뉴"><a className="text-button" href="#/articles" aria-current={page === 'articles' ? 'page' : undefined}>글 목록</a><a className="text-button" href="#/account" aria-current={page === 'account' ? 'page' : undefined}>내 계정</a><button className="text-button" onClick={() => clearSession('로그아웃되었습니다.')}>로그아웃</button></nav>}
+      {session && <nav className="header-nav" aria-label="회원 메뉴"><a className="text-button" href="#/articles" aria-current={page === 'articles' ? 'page' : undefined}>글 목록</a>{session.user.role === 'ADMIN' && <a className="text-button" href="#/ingestions" aria-current={page === 'ingestions' ? 'page' : undefined}>수집 관리</a>}<a className="text-button" href="#/account" aria-current={page === 'account' ? 'page' : undefined}>내 계정</a><button className="text-button" onClick={() => clearSession('로그아웃되었습니다.')}>로그아웃</button></nav>}
     </header>
     {suspension && <section className="suspension-banner" role="alert" aria-label="계정 정지 안내"><h2>계정 이용이 정지되었습니다</h2><dl><div><dt>정지 사유</dt><dd>{suspension.reason}</dd></div><div><dt>정지 일시</dt><dd>{suspension.suspendedAt && Number.isFinite(Date.parse(suspension.suspendedAt)) ? `${koreanDate(suspension.suspendedAt)} (한국 시간)` : '과거 정지 일시가 등록되어 있지 않습니다.'}</dd></div></dl></section>}
-    {restoring ? <main className="news-layout"><p className="news-state" role="status">서버에서 로그인 정보를 확인하는 중입니다…</p></main> : page === 'articles' && session ? <ArticleBrowser token={session.accessToken} onSessionExpired={handleAuthFailure} /> : <main className="layout">
+    {restoring ? <main className="news-layout"><p className="news-state" role="status">서버에서 로그인 정보를 확인하는 중입니다…</p></main> : page === 'ingestions' && session ? <IngestionPanel token={session.accessToken} onAuthFailure={handleAuthFailure} /> : page === 'articles' && session ? <ArticleBrowser token={session.accessToken} onSessionExpired={handleAuthFailure} /> : <main className="layout">
       <aside className="intro">
         <span className="eyebrow">YOUR NEXT CHAPTER</span>
         <h1>좋아하는 게임의<br />다음 이야기를<br /><span>함께 만나세요.</span></h1>

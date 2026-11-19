@@ -9,15 +9,22 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-/** 데모와 이후 수집 모듈이 공통으로 사용하는 서버 내부 저장 경로. */
+/** 수집 모듈이 사용하는 서버 내부 저장 경로. */
 @Service
 public class ArticleStore {
     public record Draft(@NotNull @Positive Long sourceId, @Positive Long gameId,
                         @NotBlank @Size(max = 128) String externalId,
                         @NotBlank @Size(max = 300) String title,
-                        @NotBlank @Size(max = 20000) String body,
+                        @NotBlank @Size(max = 100000) String body,
                         @NotBlank @Size(max = 2048) String originalUrl,
-                        @NotNull Instant publishedAt, boolean demo) {}
+                        @NotNull Instant publishedAt, boolean demo,
+                        @NotBlank @Size(max = 600) String excerpt,
+                        @Size(max = 2048) String thumbnailUrl) {
+        public Draft(Long sourceId, Long gameId, String externalId, String title, String body,
+                     String originalUrl, Instant publishedAt, boolean demo) {
+            this(sourceId, gameId, externalId, title, body, originalUrl, publishedAt, demo, TextExcerpt.of(body), null);
+        }
+    }
     public record Stored(Long id, boolean created) {}
 
     private final ArticleRepository articles;
@@ -36,6 +43,12 @@ public class ArticleStore {
             if (!("https".equalsIgnoreCase(url.getScheme()) || "http".equalsIgnoreCase(url.getScheme()))
                 || url.getHost() == null || url.getUserInfo() != null) throw invalid();
         } catch (IllegalArgumentException error) { throw invalid(); }
+        if (draft.thumbnailUrl() != null) {
+            try {
+                URI thumbnail = URI.create(draft.thumbnailUrl());
+                if (!"https".equalsIgnoreCase(thumbnail.getScheme()) || thumbnail.getHost() == null || thumbnail.getUserInfo() != null) throw invalid();
+            } catch (IllegalArgumentException error) { throw invalid(); }
+        }
         var existing = articles.findBySourceIdAndExternalId(draft.sourceId(), draft.externalId());
         if (existing.isPresent()) return new Stored(existing.get().getId(), false);
         var source = sources.findById(draft.sourceId()).orElseThrow(ArticleStore::invalid);

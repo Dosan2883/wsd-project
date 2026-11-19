@@ -1,7 +1,6 @@
 // 로컬 Vite 프록시와 실행 중인 백엔드를 검증하며 테스트 회원 한 명을 생성한다.
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
 
 const base = process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:5173'
 const target = new URL(base)
@@ -42,26 +41,16 @@ await request('/admin/access', 403, { token: session.accessToken })
 const games = await request('/games', 200, { token: session.accessToken })
 const articles = await request('/articles', 200, { token: session.accessToken })
 assert(Array.isArray(articles.items))
-if (process.argv.includes('--expect-demo')) {
-  const demos = articles.items.filter(article => article.demo)
-  assert.equal(demos.length, 3, '데모 프로필의 공개 글 3건이 필요합니다.')
-  assert(games.length >= 3)
-  const ids = demos.map(article => article.id).sort((a, b) => a - b)
-  for (const item of demos) {
-    const detail = await request(`/articles/${item.id}`, 200, { token: session.accessToken })
-    assert.equal(detail.title, item.title)
-    assert.equal(detail.demo, true)
-    assert(detail.body.includes('실제 Steam에서 수집한 뉴스가 아닙니다.'))
-    const filtered = await request(`/articles?gameId=${item.game.id}&q=${encodeURIComponent(item.game.name)}`, 200, { token: session.accessToken })
-    assert(filtered.items.some(article => article.id === item.id))
-  }
-  if (process.argv.includes('--save-demo-snapshot')) {
-    await mkdir(new URL('../.cache/', import.meta.url), { recursive: true })
-    await writeFile(new URL('../.cache/demo-article-ids.json', import.meta.url), JSON.stringify(ids))
-  }
-  if (process.argv.includes('--check-demo-snapshot')) {
-    const before = JSON.parse(await readFile(new URL('../.cache/demo-article-ids.json', import.meta.url), 'utf8'))
-    assert.deepEqual(ids, before, '서버 재시작 전후 데모 글 ID가 같아야 합니다.')
+assert(Array.isArray(games))
+for (const item of articles.items.slice(0, 3)) {
+  assert.equal(item.demo, false, '공개 목록에 데모 글이 남아 있으면 안 됩니다.')
+  const detail = await request(`/articles/${item.id}`, 200, { token: session.accessToken })
+  assert.equal(detail.title, item.title)
+  assert.equal(detail.demo, false)
+  assert.equal(typeof detail.body, 'string')
+  if (item.game) {
+    const filtered = await request(`/articles?gameId=${item.game.id}`, 200, { token: session.accessToken })
+    assert(filtered.items.every(article => article.game?.id === item.game.id))
   }
 }
 const segments = session.accessToken.split('.')

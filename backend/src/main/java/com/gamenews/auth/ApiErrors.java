@@ -57,6 +57,11 @@ public class ApiErrors {
         return ResponseEntity.badRequest().body(new ErrorBody("INVALID_PARAMETER", "페이지·개수·게임·검색어·글 번호를 확인해 주세요.", Map.of()));
     }
 
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    ResponseEntity<ErrorBody> conflict() {
+        return ResponseEntity.status(409).body(new ErrorBody("STATE_CONFLICT", "다른 요청이 먼저 상태를 변경했습니다. 새로고침 후 다시 확인해 주세요.", Map.of()));
+    }
+
     static void write(ObjectMapper mapper, HttpServletResponse response, int status, String code, String message) throws IOException {
         response.setStatus(status);
         response.setContentType("application/json;charset=UTF-8");
